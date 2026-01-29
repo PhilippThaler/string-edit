@@ -62,11 +62,11 @@ func main() {
 			return
 		}
 		latest, _ := store.GetLatestID()
-		http.Redirect(w, r, fmt.Sprintf("/entry/%d", latest), http.StatusFound)
+		http.Redirect(w, r, fmt.Sprintf("/%d", latest), http.StatusFound)
 	})
 
 	// View or Edit a specific entry
-	mux.HandleFunc("GET /entry/{id}", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /{id}", func(w http.ResponseWriter, r *http.Request) {
 		idStr := r.PathValue("id")
 		id, err := strconv.Atoi(idStr)
 		if err != nil {
@@ -94,14 +94,14 @@ func main() {
 			Editing:      isEditing,
 			CurrentIndex: id,
 			TotalCount:   latest,
-			EditLink:     fmt.Sprintf("/entry/%d?edit=true", id),
+			EditLink:     fmt.Sprintf("/%d?edit=true", id),
 		}
 
 		if id > 1 {
-			data.PrevLink = fmt.Sprintf("/entry/%d", id-1)
+			data.PrevLink = fmt.Sprintf("/%d", id-1)
 		}
 		if id < latest {
-			data.NextLink = fmt.Sprintf("/entry/%d", id+1)
+			data.NextLink = fmt.Sprintf("/%d", id+1)
 		}
 
 		tmpl.Execute(w, data)
@@ -133,7 +133,7 @@ func main() {
 			return
 		}
 
-		http.Redirect(w, r, fmt.Sprintf("/entry/%d", newID), http.StatusFound)
+		http.Redirect(w, r, fmt.Sprintf("/%d", newID), http.StatusFound)
 	})
 
 	log.Println("Server started at http://localhost:8080")
