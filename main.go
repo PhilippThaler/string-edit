@@ -9,6 +9,7 @@ import (
 	"os"
 	"site/storage"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -120,10 +121,24 @@ func main() {
 			return
 		}
 
-		// Get IP address
-		ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+		// Get IP address (Handle Reverse Proxy headers)
+		ip := r.Header.Get("X-Forwarded-For")
+		if ip != "" {
+			// If multiple proxies, the first IP is the client
+			if comma := strings.Index(ip, ","); comma != -1 {
+				ip = ip[:comma]
+			}
+		} else {
+			ip = r.Header.Get("X-Real-IP")
+		}
+
 		if ip == "" {
-			ip = r.RemoteAddr
+			// Fallback to direct connection IP
+			var err error
+			ip, _, err = net.SplitHostPort(r.RemoteAddr)
+			if err != nil {
+				ip = r.RemoteAddr
+			}
 		}
 
 		newID, err := store.AddEntry(newText, ip)
