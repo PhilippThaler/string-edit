@@ -1,0 +1,16 @@
+# Binaries
+site
+site.exe
+
+# SQLite Database
+data/
+*.db
+*.db-journal
+*.tmp
+
+# IDEs
+.vscode/
+.idea/
+
+# Docker
+.dockerignore
