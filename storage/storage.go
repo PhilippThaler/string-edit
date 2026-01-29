@@ -64,7 +64,7 @@ func (s *Store) AddEntry(content, ip string) (int, error) {
 	}
 	defer stmt.Close()
 
-	res, err := stmt.Exec(content, time.Now(), ip)
+	res, err := stmt.Exec(content, time.Now().UTC(), ip)
 	if err != nil {
 		return 0, err
 	}

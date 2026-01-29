@@ -91,7 +91,7 @@ func main() {
 
 		data := PageData{
 			Content:      entry.Content,
-			Timestamp:    entry.CreatedAt.In(loc).Format("Jan 02, 2006 15:04:05 UTC"),
+			Timestamp:    entry.CreatedAt.In(loc).Format("Jan 02, 2006 15:04:05 MST"),
 			Editing:      isEditing,
 			CurrentIndex: id,
 			TotalCount:   latest,
