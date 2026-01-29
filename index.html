@@ -2,34 +2,77 @@
 <html>
 <head>
     <title>My board</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
+        * { box-sizing: border-box; }
         body {
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 100vh;
+            min-height: 100vh;
             margin: 0;
-            font-family: sans-serif;
+            padding: 1rem;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             text-align: center;
+            background-color: #fafafa;
         }
-        .container { border: 1px solid #ddd; padding: 2rem; border-radius: 8px; min-width: 300px; }
-        .controls { display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; }
+        .container { 
+            background: white;
+            border: 1px solid #ddd; 
+            padding: 1.5rem; 
+            border-radius: 12px; 
+            width: 100%;
+            max-width: 500px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .controls { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            margin-top: 1.5rem; 
+            gap: 0.5rem;
+        }
         button, .btn { 
             cursor: pointer; 
-            padding: 0.5rem 1rem; 
+            padding: 0.75rem 1.25rem; 
             font-size: 1rem;
             background-color: #f0f0f0;
             color: #333;
             border: 1px solid #ccc;
-            border-radius: 4px;
+            border-radius: 8px;
             text-decoration: none;
-            display: inline-block;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            min-width: 48px; /* Minimum touch target size */
+            touch-action: manipulation;
         }
-        .btn:hover { background-color: #e0e0e0; }
+        .btn:hover, button:hover { background-color: #e0e0e0; }
         .nav-btn:disabled, .btn.disabled { opacity: 0.3; cursor: default; pointer-events: none; }
-        .status { margin-bottom: 1rem; color: #666; font-size: 0.9rem; }
+        .status { margin-bottom: 0.5rem; color: #666; font-size: 0.9rem; }
         .meta { color: #999; font-size: 0.8rem; margin-top: 4px; }
-        form { display: inline; }
+        
+        /* Form Styles */
+        form { width: 100%; }
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-family: inherit;
+            resize: vertical;
+            min-height: 100px;
+            margin-bottom: 10px;
+        }
+        /* Reverted save button to match other buttons */
+        button[type="submit"] {
+            background-color: #f0f0f0;
+            color: #333;
+            border-color: #ccc;
+            width: 100%;
+        }
+        button[type="submit"]:hover { background-color: #e0e0e0; }
     </style>
 </head>
 <body>
@@ -41,7 +84,7 @@
         
         {{if .Editing}}
             <form action="/save" method="POST">
-                <input type="text" name="newText" value="{{.Content}}" autofocus>
+                <textarea name="newText" autofocus maxlength="280">{{.Content}}</textarea>
                 <div class="controls">
                     <button type="submit">Save New Entry</button>
                 </div>
