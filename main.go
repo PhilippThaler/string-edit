@@ -26,15 +26,18 @@ type PageData struct {
 	TotalCount   int
 }
 
-const maxLen = 280
+const (
+	defaultDBPath = "data/history.db"
 
-func main() {
-	// Use a consistent path for the database
-	const dbPath = "data/history.db"
+	maxLen                  = 280
+	defaultDBEntryText      = "Hello, World!"
+	defaultDBEntryIPAddress = "system"
+)
 
-	store, err := storage.NewStore(dbPath)
+func run() error {
+	store, err := storage.NewStore(defaultDBPath)
 	if err != nil {
-		log.Fatal("Failed to initialize database:", err)
+		return fmt.Errorf("failed to initialize database: %w", err)
 	}
 	defer store.Close()
 
@@ -49,12 +52,24 @@ func main() {
 		loc = time.UTC
 	}
 
-	// Ensure we have at least one entry so the site isn't broken on fresh start
-	if id, _ := store.GetLatestID(); id == 0 {
-		store.AddEntry("Hello, World!", "system")
+	if latest, err := store.GetLatestID(); err != nil {
+		return fmt.Errorf("failed to get latest ID: %w", err)
+	} else if latest == 0 {
+		// If database is empty, create first entry
+		if _, err := store.AddEntry(defaultDBEntryText, defaultDBEntryIPAddress); err != nil {
+			return fmt.Errorf("failed to add initial entry: %w", err)
+		}
 	}
 
 	tmpl := template.Must(template.ParseFiles("index.html"))
+
+	mux := newServer(store, tmpl, loc)
+
+	log.Println("Server started at http://localhost:8080")
+	return http.ListenAndServe(":8080", mux)
+}
+
+func newServer(store *storage.Store, tmpl *template.Template, loc *time.Location) http.Handler {
 	mux := http.NewServeMux()
 
 	// Redirect root to the newest entry
@@ -63,7 +78,12 @@ func main() {
 			http.NotFound(w, r)
 			return
 		}
-		latest, _ := store.GetLatestID()
+		latest, err := store.GetLatestID()
+		if err != nil {
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			log.Printf("Could not get latest ID: %v", err)
+			return
+		}
 		http.Redirect(w, r, fmt.Sprintf("/%d", latest), http.StatusFound)
 	})
 
@@ -76,7 +96,12 @@ func main() {
 			return
 		}
 
-		latest, _ := store.GetLatestID()
+		latest, err := store.GetLatestID()
+		if err != nil {
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			log.Printf("Could not get latest ID: %v", err)
+			return
+		}
 		if id < 1 || id > latest {
 			http.NotFound(w, r)
 			return
@@ -151,7 +176,12 @@ func main() {
 
 		http.Redirect(w, r, fmt.Sprintf("/%d", newID), http.StatusFound)
 	})
+	return mux
+}
 
-	log.Println("Server started at http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", mux))
+func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "%s\n", err)
+		os.Exit(1)
+	}
 }

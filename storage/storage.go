@@ -97,11 +97,14 @@ func (s *Store) GetEntry(id int) (*Entry, error) {
 
 // GetLatestID returns the ID of the most recent entry
 func (s *Store) GetLatestID() (int, error) {
-	var id int
-	// Returns error if table is empty (Scan fails on NULL)
+	var id sql.NullInt64
 	err := s.db.QueryRow("SELECT MAX(id) FROM entries").Scan(&id)
 	if err != nil {
-		return 0, nil // Return 0 if empty or error, caller handles "empty db" case
+		return 0, err
 	}
-	return id, nil
+	// If empty
+	if !id.Valid {
+		return 0, nil
+	}
+	return int(id.Int64), nil
 }
