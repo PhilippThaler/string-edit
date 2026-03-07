@@ -1,14 +1,17 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"html/template"
 	"log"
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"site/storage"
@@ -65,8 +68,34 @@ func run() error {
 
 	mux := newServer(store, tmpl, loc)
 
-	log.Println("Server started at http://localhost:8080")
-	return http.ListenAndServe(":8080", mux)
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: mux,
+	}
+
+	// Start server in a goroutine
+	go func() {
+		log.Println("Server started at http://localhost:8080")
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("listen: %s\n", err)
+		}
+	}()
+
+	// Wait for interrupt signal to gracefully shutdown the server with a timeout of 5 seconds.
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	<-quit
+	log.Println("Shutting down server...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		return fmt.Errorf("server forced to shutdown: %w", err)
+	}
+
+	log.Println("Server exiting")
+	return nil
 }
 
 func newServer(store *storage.Store, tmpl *template.Template, loc *time.Location) http.Handler {
