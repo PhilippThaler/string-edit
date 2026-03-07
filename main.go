@@ -32,7 +32,7 @@ type PageData struct {
 const (
 	defaultDBPath = "data/history.db"
 
-	maxLen                  = 280
+	maxLen                  = 500
 	defaultDBEntryText      = "Hello, World!"
 	defaultDBEntryIPAddress = "system"
 )
@@ -116,7 +116,23 @@ func newServer(store *storage.Store, tmpl *template.Template, loc *time.Location
 		http.Redirect(w, r, fmt.Sprintf("/%d", latest), http.StatusFound)
 	})
 
-	// View or Edit a specific entry
+	// Show form for a new entry
+	mux.HandleFunc("GET /new", func(w http.ResponseWriter, r *http.Request) {
+		latest, err := store.GetLatestID()
+		if err != nil {
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			log.Printf("Could not get latest ID: %v", err)
+			return
+		}
+		data := PageData{
+			Editing:      true,
+			CurrentIndex: latest + 1,
+			TotalCount:   latest,
+		}
+		tmpl.Execute(w, data)
+	})
+
+	// View a specific entry
 	mux.HandleFunc("GET /{id}", func(w http.ResponseWriter, r *http.Request) {
 		idStr := r.PathValue("id")
 		id, err := strconv.Atoi(idStr)
@@ -142,15 +158,12 @@ func newServer(store *storage.Store, tmpl *template.Template, loc *time.Location
 			return
 		}
 
-		isEditing := r.URL.Query().Get("edit") == "true"
-
 		data := PageData{
 			Content:      entry.Content,
 			Timestamp:    entry.CreatedAt.In(loc).Format("Jan 02, 2006 15:04:05 MST"),
-			Editing:      isEditing,
 			CurrentIndex: id,
 			TotalCount:   latest,
-			EditLink:     fmt.Sprintf("/%d?edit=true", id),
+			EditLink:     "/new",
 		}
 
 		if id > 1 {
@@ -165,7 +178,7 @@ func newServer(store *storage.Store, tmpl *template.Template, loc *time.Location
 
 	// Save a new entry
 	mux.HandleFunc("POST /save", func(w http.ResponseWriter, r *http.Request) {
-		newText := r.FormValue("newText")
+		newText := strings.TrimSpace(r.FormValue("newText"))
 
 		if newText == "" {
 			http.Error(w, "Content cannot be empty", http.StatusBadRequest)
