@@ -26,13 +26,21 @@ type Store struct {
 func NewStore(dbPath string) (*Store, error) {
 	// Create the directory if it doesn't exist
 	dir := filepath.Dir(dbPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
 
 	// Driver name is "sqlite" for modernc.org/sqlite
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(1)
+
+	enableWALSQL := "PRAGMA journal_mode=WAL;"
+
+	if _, err := db.Exec(enableWALSQL); err != nil {
+		db.Close()
 		return nil, err
 	}
 
