@@ -25,6 +25,7 @@ type PageData struct {
 	PrevLink     string
 	NextLink     string
 	EditLink     string
+	Entries      []storage.Entry
 	CurrentIndex int
 	TotalCount   int
 }
@@ -171,6 +172,21 @@ func newServer(store *storage.Store, tmpl *template.Template, loc *time.Location
 		}
 		if id < latest {
 			data.NextLink = fmt.Sprintf("/%d", id+1)
+		}
+
+		tmpl.Execute(w, data)
+	})
+
+	mux.HandleFunc("GET /list", func(w http.ResponseWriter, r *http.Request) {
+		entries, err := store.GetAllEntries()
+		if err != nil {
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			log.Printf("Could not get latest ID: %v", err)
+			return
+		}
+
+		data := PageData{
+			Entries: entries,
 		}
 
 		tmpl.Execute(w, data)

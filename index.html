@@ -103,6 +103,36 @@
             color: #333;
             min-height: 120px;
         }
+
+        /* List View Styles */
+        .list-container {
+            text-align: left;
+            margin: 1.5rem 0;
+            max-height: 400px;
+            overflow-y: auto;
+            padding-right: 10px;
+        }
+        .list-item {
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #eee;
+        }
+        .list-item:last-child { border-bottom: none; }
+        .list-item a {
+            font-weight: bold;
+            text-decoration: none;
+            color: #333;
+            font-size: 1.1rem;
+        }
+        .list-item a:hover { color: #000; text-decoration: underline; }
+        .list-preview {
+            font-size: 0.85rem;
+            color: #666;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-top: 4px;
+            font-family: monospace;
+        }
     </style>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
@@ -146,8 +176,22 @@
 </head>
 <body>
     <div class="container">
-        
-        {{if .Editing}}
+        {{if .Entries}}
+            <h1>All Entries</h1>
+            <div class="list-container">
+                {{range .Entries}}
+                    <div class="list-item">
+                        <a href="/{{.ID}}">Entry {{.ID}}</a>
+                        <span class="meta" style="float: right;">{{.CreatedAt.Format "Jan 02, 2006"}}</span>
+                        <div class="list-preview">{{.Content}}</div>
+                    </div>
+                {{end}}
+            </div>
+            <div class="controls">
+                <a href="/" class="btn">Back to Board</a>
+                <a href="/new" class="btn">New Entry</a>
+            </div>
+        {{else if .Editing}}
             <h1>Type what you want</h1>
             <form action="/save" method="POST">
                 <textarea name="newText" id="editTextArea" placeholder="Type what you want..." autofocus maxlength="500">{{.Content}}</textarea>
@@ -162,11 +206,10 @@
                 </div>
             </form>
         {{else}}
-
-        <div class="status">
-            Entry {{.CurrentIndex}} of {{.TotalCount}}
-            <div class="meta">{{.Timestamp}}</div>
-        </div>
+            <div class="status">
+                Entry {{.CurrentIndex}} of {{.TotalCount}}
+                <div class="meta">{{.Timestamp}}</div>
+            </div>
             <div class="content">{{.Content}}</div>
             <div class="controls">
                 {{if .PrevLink}}
@@ -175,6 +218,7 @@
                     <span class="btn nav-btn disabled">&lt;</span>
                 {{end}}
 
+                <a href="/list" class="btn">List All</a>
                 <a href="{{.EditLink}}" class="btn">New Entry</a>
 
                 {{if .NextLink}}
