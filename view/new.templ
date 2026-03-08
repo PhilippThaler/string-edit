@@ -1,0 +1,54 @@
+package view
+
+templ New() {
+	@Layout() {
+		<h1>Type what you want</h1>
+		<form action="/save" method="POST">
+			<textarea name="newText" id="editTextArea" placeholder="Type what you want..." autofocus maxlength="500"></textarea>
+			<div class="char-count" id="charCount">0 / 500</div>
+			<p class="errorMessage" id="errorMessage"></p>
+			<div class="controls">
+				<button type="submit" id="submitButton">Save New Entry</button>
+				<a href="/" class="btn">Cancel</a>
+			</div>
+		</form>
+		<script>
+            document.addEventListener('DOMContentLoaded', () => {
+                const textArea = document.getElementById('editTextArea')
+                if (!textArea) return
+
+                const errorMessage = document.getElementById('errorMessage')
+                const submitButton = document.getElementById('submitButton')
+                const charCount = document.getElementById('charCount')
+                
+                let hasSubmittedOnce = false
+
+                const validate = () => {
+                    const length = textArea.value.trim().length
+                    charCount.innerText = `${length} / 500`
+
+                    const isValid = length > 0
+
+                    if (hasSubmittedOnce) {
+                        errorMessage.innerText = isValid ? "" : "Message cannot be empty"
+                    }
+                    
+                    submitButton.disabled = !isValid
+                    submitButton.style.opacity = isValid ? "1" : "0.5"
+                    return isValid
+                }
+
+                const form = textArea.closest('form')
+                form.addEventListener('submit', (e) => {
+                    hasSubmittedOnce = true
+                    if (!validate()) {
+                        e.preventDefault()
+                    }
+                })
+
+                validate()
+                textArea.addEventListener('input', validate)
+            })
+        </script>
+	}
+}

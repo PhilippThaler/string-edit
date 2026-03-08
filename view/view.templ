@@ -1,0 +1,27 @@
+package view
+
+import "strconv"
+
+templ View(content, timestamp, prevLink, nextLink, editLink string, currentIndex, totalCount int) {
+	@Layout() {
+		<div class="status">
+			Entry { strconv.Itoa(currentIndex) } of { strconv.Itoa(totalCount) }
+			<div class="meta">{ timestamp }</div>
+		</div>
+		<div class="content">{ content }</div>
+		<div class="controls">
+			if prevLink != "" {
+				<a href={ templ.SafeURL(prevLink) } class="btn nav-btn">&lt;</a>
+			} else {
+				<span class="btn nav-btn disabled">&lt;</span>
+			}
+			<a href="/list" class="btn">List All</a>
+			<a href={ templ.SafeURL(editLink) } class="btn">New Entry</a>
+			if nextLink != "" {
+				<a href={ templ.SafeURL(nextLink) } class="btn nav-btn">&gt;</a>
+			} else {
+				<span class="btn nav-btn disabled">&gt;</span>
+			}
+		</div>
+	}
+}

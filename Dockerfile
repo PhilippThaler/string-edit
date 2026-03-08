@@ -23,9 +23,8 @@ WORKDIR /app
 # Install tzdata for timezone support
 RUN apk add --no-cache tzdata
 
-# Copy the binary and the templates from the builder stage
+# Copy the binary from the builder stage
 COPY --from=builder /app/site .
-COPY --from=builder /app/templates ./templates
 
 # Expose the application port
 EXPOSE 8080

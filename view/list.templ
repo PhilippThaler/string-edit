@@ -1,0 +1,25 @@
+package view
+
+import (
+	"site/storage"
+	"strconv"
+)
+
+templ List(entries []storage.Entry) {
+	@Layout() {
+		<h1>All Entries</h1>
+		<div class="list-container">
+			for _, entry := range entries {
+				<div class="list-item">
+					<a href={ templ.SafeURL("/" + strconv.Itoa(entry.ID)) }>Entry { strconv.Itoa(entry.ID) }</a>
+					<span class="meta" style="float: right;">{ entry.CreatedAt.Format("Jan 02, 2006") }</span>
+					<div class="list-preview">{ entry.Content }</div>
+				</div>
+			}
+		</div>
+		<div class="controls">
+			<a href="/" class="btn">Back to Board</a>
+			<a href="/new" class="btn">New Entry</a>
+		</div>
+	}
+}

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"html/template"
 	"log"
 	"net"
 	"net/http"
@@ -15,21 +14,8 @@ import (
 	"time"
 
 	"site/storage"
+	"site/view"
 )
-
-// PageData is passed to the template
-type PageData struct {
-	Page         string
-	Content      string
-	Timestamp    string
-	Editing      bool
-	PrevLink     string
-	NextLink     string
-	EditLink     string
-	Entries      []storage.Entry
-	CurrentIndex int
-	TotalCount   int
-}
 
 const (
 	defaultDBPath = "data/history.db"
@@ -66,9 +52,7 @@ func run() error {
 		}
 	}
 
-	tmpl := template.Must(template.ParseGlob("templates/*.html"))
-
-	mux := newServer(store, tmpl, loc)
+	mux := newServer(store, loc)
 
 	srv := &http.Server{
 		Addr:    ":8080",
@@ -100,7 +84,7 @@ func run() error {
 	return nil
 }
 
-func newServer(store *storage.Store, tmpl *template.Template, loc *time.Location) http.Handler {
+func newServer(store *storage.Store, loc *time.Location) http.Handler {
 	mux := http.NewServeMux()
 
 	// Redirect root to the newest entry
@@ -120,18 +104,10 @@ func newServer(store *storage.Store, tmpl *template.Template, loc *time.Location
 
 	// Show form for a new entry
 	mux.HandleFunc("GET /new", func(w http.ResponseWriter, r *http.Request) {
-		latest, err := store.GetLatestID()
+		err := view.New().Render(r.Context(), w)
 		if err != nil {
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			log.Printf("Could not get latest ID: %v", err)
-			return
+			log.Printf("Template execution error: %v", err)
 		}
-		data := PageData{
-			Page:         "new",
-			CurrentIndex: latest + 1,
-			TotalCount:   latest,
-		}
-		tmpl.ExecuteTemplate(w, "layout.html", data)
 	})
 
 	// View a specific entry
@@ -160,23 +136,29 @@ func newServer(store *storage.Store, tmpl *template.Template, loc *time.Location
 			return
 		}
 
-		data := PageData{
-			Page:         "view",
-			Content:      entry.Content,
-			Timestamp:    entry.CreatedAt.In(loc).Format("Jan 02, 2006 15:04:05 MST"),
-			CurrentIndex: id,
-			TotalCount:   latest,
-			EditLink:     "/new",
-		}
-
+		prevLink := ""
 		if id > 1 {
-			data.PrevLink = fmt.Sprintf("/%d", id-1)
-		}
-		if id < latest {
-			data.NextLink = fmt.Sprintf("/%d", id+1)
+			prevLink = fmt.Sprintf("/%d", id-1)
 		}
 
-		tmpl.ExecuteTemplate(w, "layout.html", data)
+		nextLink := ""
+		if id < latest {
+			nextLink = fmt.Sprintf("/%d", id+1)
+		}
+
+		err = view.View(
+			entry.Content,
+			entry.CreatedAt.In(loc).Format("Jan 02, 2006 15:04:05 MST"),
+			prevLink,
+			nextLink,
+			"/new",
+			id,
+			latest,
+		).Render(r.Context(), w)
+
+		if err != nil {
+			log.Printf("Template execution error: %v", err)
+		}
 	})
 
 	mux.HandleFunc("GET /list", func(w http.ResponseWriter, r *http.Request) {
@@ -187,12 +169,7 @@ func newServer(store *storage.Store, tmpl *template.Template, loc *time.Location
 			return
 		}
 
-		data := PageData{
-			Page:    "list",
-			Entries: entries,
-		}
-
-		err = tmpl.ExecuteTemplate(w, "layout.html", data)
+		err = view.List(entries).Render(r.Context(), w)
 		if err != nil {
 			log.Printf("Template execution error: %v", err)
 		}
