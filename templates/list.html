@@ -1,0 +1,16 @@
+{{define "list"}}
+    <h1>All Entries</h1>
+    <div class="list-container">
+        {{range .Entries}}
+            <div class="list-item">
+                <a href="/{{.ID}}">Entry {{.ID}}</a>
+                <span class="meta" style="float: right;">{{.CreatedAt.Format "Jan 02, 2006"}}</span>
+                <div class="list-preview">{{.Content}}</div>
+            </div>
+        {{end}}
+    </div>
+    <div class="controls">
+        <a href="/" class="btn">Back to Board</a>
+        <a href="/new" class="btn">New Entry</a>
+    </div>
+{{end}}

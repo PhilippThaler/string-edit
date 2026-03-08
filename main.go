@@ -19,6 +19,7 @@ import (
 
 // PageData is passed to the template
 type PageData struct {
+	Page         string
 	Content      string
 	Timestamp    string
 	Editing      bool
@@ -65,7 +66,7 @@ func run() error {
 		}
 	}
 
-	tmpl := template.Must(template.ParseFiles("index.html"))
+	tmpl := template.Must(template.ParseGlob("templates/*.html"))
 
 	mux := newServer(store, tmpl, loc)
 
@@ -126,11 +127,11 @@ func newServer(store *storage.Store, tmpl *template.Template, loc *time.Location
 			return
 		}
 		data := PageData{
-			Editing:      true,
+			Page:         "new",
 			CurrentIndex: latest + 1,
 			TotalCount:   latest,
 		}
-		tmpl.Execute(w, data)
+		tmpl.ExecuteTemplate(w, "layout.html", data)
 	})
 
 	// View a specific entry
@@ -160,6 +161,7 @@ func newServer(store *storage.Store, tmpl *template.Template, loc *time.Location
 		}
 
 		data := PageData{
+			Page:         "view",
 			Content:      entry.Content,
 			Timestamp:    entry.CreatedAt.In(loc).Format("Jan 02, 2006 15:04:05 MST"),
 			CurrentIndex: id,
@@ -174,7 +176,7 @@ func newServer(store *storage.Store, tmpl *template.Template, loc *time.Location
 			data.NextLink = fmt.Sprintf("/%d", id+1)
 		}
 
-		tmpl.Execute(w, data)
+		tmpl.ExecuteTemplate(w, "layout.html", data)
 	})
 
 	mux.HandleFunc("GET /list", func(w http.ResponseWriter, r *http.Request) {
@@ -186,10 +188,14 @@ func newServer(store *storage.Store, tmpl *template.Template, loc *time.Location
 		}
 
 		data := PageData{
+			Page:    "list",
 			Entries: entries,
 		}
 
-		tmpl.Execute(w, data)
+		err = tmpl.ExecuteTemplate(w, "layout.html", data)
+		if err != nil {
+			log.Printf("Template execution error: %v", err)
+		}
 	})
 
 	// Save a new entry

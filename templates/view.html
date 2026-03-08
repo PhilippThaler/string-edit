@@ -1,0 +1,23 @@
+{{define "view"}}
+    <div class="status">
+        Entry {{.CurrentIndex}} of {{.TotalCount}}
+        <div class="meta">{{.Timestamp}}</div>
+    </div>
+    <div class="content">{{.Content}}</div>
+    <div class="controls">
+        {{if .PrevLink}}
+            <a href="{{.PrevLink}}" class="btn nav-btn">&lt;</a>
+        {{else}}
+            <span class="btn nav-btn disabled">&lt;</span>
+        {{end}}
+
+        <a href="/list" class="btn">List All</a>
+        <a href="{{.EditLink}}" class="btn">New Entry</a>
+
+        {{if .NextLink}}
+            <a href="{{.NextLink}}" class="btn nav-btn">&gt;</a>
+        {{else}}
+            <span class="btn nav-btn disabled">&gt;</span>
+        {{end}}
+    </div>
+{{end}}
