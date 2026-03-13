@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -39,7 +39,7 @@ func run() error {
 	}
 	loc, err := time.LoadLocation(tz)
 	if err != nil {
-		log.Printf("Warning: Invalid timezone '%s', defaulting to UTC. Error: %v", tz, err)
+		slog.Warn("Invalid timezone, defaulting to UTC", "timezone", tz, "error", err)
 		loc = time.UTC
 	}
 
@@ -61,9 +61,9 @@ func run() error {
 
 	// Start server in a goroutine
 	go func() {
-		log.Println("Server started at http://localhost:8080")
+		slog.Info("Server started at http://localhost:8080")
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("listen: %s\n", err)
+			slog.Error("listen error", "error", err)
 		}
 	}()
 
@@ -71,7 +71,7 @@ func run() error {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 	<-quit
-	log.Println("Shutting down server...")
+	slog.Info("Shutting down server...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -80,7 +80,7 @@ func run() error {
 		return fmt.Errorf("server forced to shutdown: %w", err)
 	}
 
-	log.Println("Server exiting")
+	slog.Info("Server exiting")
 	return nil
 }
 
@@ -96,7 +96,7 @@ func newServer(store *storage.Store, loc *time.Location) http.Handler {
 		latest, err := store.GetLatestID()
 		if err != nil {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			log.Printf("Could not get latest ID: %v", err)
+			slog.Error("Could not get latest ID", "error", err)
 			return
 		}
 		http.Redirect(w, r, fmt.Sprintf("/%d", latest), http.StatusFound)
@@ -106,7 +106,7 @@ func newServer(store *storage.Store, loc *time.Location) http.Handler {
 	mux.HandleFunc("GET /new", func(w http.ResponseWriter, r *http.Request) {
 		err := view.New().Render(r.Context(), w)
 		if err != nil {
-			log.Printf("Template execution error: %v", err)
+			slog.Error("Template execution error", "error", err)
 		}
 	})
 
@@ -122,7 +122,7 @@ func newServer(store *storage.Store, loc *time.Location) http.Handler {
 		latest, err := store.GetLatestID()
 		if err != nil {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			log.Printf("Could not get latest ID: %v", err)
+			slog.Error("Could not get latest ID", "error", err)
 			return
 		}
 		if id < 1 || id > latest {
@@ -157,7 +157,7 @@ func newServer(store *storage.Store, loc *time.Location) http.Handler {
 		).Render(r.Context(), w)
 
 		if err != nil {
-			log.Printf("Template execution error: %v", err)
+			slog.Error("Template execution error", "error", err)
 		}
 	})
 
@@ -165,13 +165,13 @@ func newServer(store *storage.Store, loc *time.Location) http.Handler {
 		entries, err := store.GetAllEntries()
 		if err != nil {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			log.Printf("Could not get latest ID: %v", err)
+			slog.Error("Could not get entries", "error", err)
 			return
 		}
 
 		err = view.List(entries).Render(r.Context(), w)
 		if err != nil {
-			log.Printf("Template execution error: %v", err)
+			slog.Error("Template execution error", "error", err)
 		}
 	})
 
@@ -210,10 +210,11 @@ func newServer(store *storage.Store, loc *time.Location) http.Handler {
 
 		newID, err := store.AddEntry(newText, ip)
 		if err != nil {
-			log.Printf("Error saving entry: %v", err)
+			slog.Error("Error saving entry", "error", err)
 			http.Error(w, "Failed to save entry", http.StatusInternalServerError)
 			return
 		}
+		slog.Info("Added Entry", "ip", ip, "text", newText)
 
 		http.Redirect(w, r, fmt.Sprintf("/%d", newID), http.StatusFound)
 	})
