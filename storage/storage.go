@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	_ "github.com/lib/pq"
 	_ "modernc.org/sqlite"
 )
 
@@ -19,44 +20,60 @@ type Entry struct {
 
 // Store handles database interactions
 type Store struct {
-	db *sql.DB
+	db     *sql.DB
+	dbType string
 }
 
-// NewStore initializes the SQLite database and returns a Store instance
-func NewStore(dbPath string) (*Store, error) {
-	// Create the directory if it doesn't exist
-	dir := filepath.Dir(dbPath)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, err
+// NewStore initializes the database and returns a Store instance
+func NewStore(dbType, dbName string) (*Store, error) {
+	switch dbType {
+	case "sqlite":
+		// Create the directory if it doesn't exist for SQLite
+		dir := filepath.Dir(dbName)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, err
+		}
 	}
 
-	// Driver name is "sqlite" for modernc.org/sqlite
-	db, err := sql.Open("sqlite", dbPath)
+	db, err := sql.Open(dbType, dbName)
 	if err != nil {
 		return nil, err
 	}
-	db.SetMaxOpenConns(1)
 
-	enableWALSQL := "PRAGMA journal_mode=WAL;"
-
-	if _, err := db.Exec(enableWALSQL); err != nil {
-		db.Close()
-		return nil, err
+	var createTableSQL string
+	switch dbType {
+	case "sqlite":
+		db.SetMaxOpenConns(1)
+		enableWALSQL := "PRAGMA journal_mode=WAL;"
+		if _, err := db.Exec(enableWALSQL); err != nil {
+			db.Close()
+			return nil, err
+		}
+		createTableSQL = `CREATE TABLE IF NOT EXISTS entries (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			content TEXT,
+			created_at DATETIME,
+			ip_address TEXT
+		);`
+	case "postgres":
+		if err := db.Ping(); err != nil {
+			db.Close()
+			return nil, err
+		}
+		createTableSQL = `CREATE TABLE IF NOT EXISTS entries (
+			id SERIAL PRIMARY KEY,
+			content TEXT,
+			created_at TIMESTAMP,
+			ip_address TEXT
+		);`
 	}
-
-	createTableSQL := `CREATE TABLE IF NOT EXISTS entries (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		content TEXT,
-		created_at DATETIME,
-		ip_address TEXT
-	);`
 
 	if _, err := db.Exec(createTableSQL); err != nil {
 		db.Close()
 		return nil, err
 	}
 
-	return &Store{db: db}, nil
+	return &Store{db: db, dbType: dbType}, nil
 }
 
 // Close closes the database connection
@@ -66,26 +83,43 @@ func (s *Store) Close() error {
 
 // AddEntry inserts a new entry into the database
 func (s *Store) AddEntry(content, ip string) (int, error) {
-	stmt, err := s.db.Prepare("INSERT INTO entries(content, created_at, ip_address) VALUES(?, ?, ?)")
-	if err != nil {
-		return 0, err
-	}
-	defer stmt.Close()
+	switch s.dbType {
+	case "postgres":
+		query := "INSERT INTO entries(content, created_at, ip_address) VALUES($1, $2, $3) RETURNING id"
+		var id int
+		err := s.db.QueryRow(query, content, time.Now().UTC(), ip).Scan(&id)
+		if err != nil {
+			return 0, err
+		}
+		return id, nil
+	default:
+		query := "INSERT INTO entries(content, created_at, ip_address) VALUES(?, ?, ?)"
+		stmt, err := s.db.Prepare(query)
+		if err != nil {
+			return 0, err
+		}
+		defer stmt.Close()
 
-	res, err := stmt.Exec(content, time.Now().UTC(), ip)
-	if err != nil {
-		return 0, err
-	}
+		res, err := stmt.Exec(content, time.Now().UTC(), ip)
+		if err != nil {
+			return 0, err
+		}
 
-	id, err := res.LastInsertId()
-	if err != nil {
-		return 0, err
+		id, err := res.LastInsertId()
+		if err != nil {
+			return 0, err
+		}
+		return int(id), nil
 	}
-	return int(id), nil
 }
 
 func (s *Store) GetEntriesPaged(limit, offset int) ([]Entry, error) {
-	rows, err := s.db.Query("SELECT id, content, created_at, ip_address FROM entries ORDER BY id DESC LIMIT ? OFFSET ?", limit, offset)
+	query := "SELECT id, content, created_at, ip_address FROM entries ORDER BY id DESC LIMIT ? OFFSET ?"
+	switch s.dbType {
+	case "postgres":
+		query = "SELECT id, content, created_at, ip_address FROM entries ORDER BY id DESC LIMIT $1 OFFSET $2"
+	}
+	rows, err := s.db.Query(query, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +148,12 @@ func (s *Store) GetTotalCount() (int, error) {
 // GetEntry retrieves a specific entry by ID
 func (s *Store) GetEntry(id int) (*Entry, error) {
 	var e Entry
-	err := s.db.QueryRow("SELECT id, content, created_at, ip_address FROM entries WHERE id = ?", id).
+	query := "SELECT id, content, created_at, ip_address FROM entries WHERE id = ?"
+	switch s.dbType {
+	case "postgres":
+		query = "SELECT id, content, created_at, ip_address FROM entries WHERE id = $1"
+	}
+	err := s.db.QueryRow(query, id).
 		Scan(&e.ID, &e.Content, &e.CreatedAt, &e.IPAddress)
 	if err != nil {
 		return nil, err

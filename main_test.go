@@ -13,7 +13,7 @@ func TestListPagination(t *testing.T) {
 	dbPath := "test_list.db"
 	defer os.Remove(dbPath)
 
-	store, err := storage.NewStore(dbPath)
+	store, err := storage.NewStore("sqlite", dbPath)
 	if err != nil {
 		t.Fatalf("failed to create store: %v", err)
 	}

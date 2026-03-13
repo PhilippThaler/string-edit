@@ -30,7 +30,34 @@ const (
 )
 
 func run() error {
-	store, err := storage.NewStore(defaultDBPath)
+	dbType := os.Getenv("DB_TYPE")
+	if dbType == "" {
+		dbType = "sqlite"
+	}
+
+	var dbName string
+	switch dbType {
+	case "sqlite":
+		dbName = os.Getenv("DB_NAME")
+		if dbName == "" {
+			dbName = defaultDBPath
+		}
+	case "postgres":
+		dbUser := os.Getenv("DB_USER")
+		dbPass := os.Getenv("DB_PASSWORD")
+		dbHost := os.Getenv("DB_HOST")
+		dbNameEnv := os.Getenv("DB_NAME")
+
+		sslMode := os.Getenv("DB_SSLMODE")
+		if sslMode == "" {
+			sslMode = "disable"
+		}
+		dbName = fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=%s", dbUser, dbPass, dbHost, dbNameEnv, sslMode)
+	default:
+		return fmt.Errorf("unsupported DB_TYPE: %s", dbType)
+	}
+
+	store, err := storage.NewStore(dbType, dbName)
 	if err != nil {
 		return fmt.Errorf("failed to initialize database: %w", err)
 	}

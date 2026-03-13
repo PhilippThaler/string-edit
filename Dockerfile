@@ -32,5 +32,9 @@ EXPOSE 8080
 # Create a volume for the database so data persists
 VOLUME /data
 
+# Set default environment variables for database connection
+ENV DB_TYPE="sqlite"
+ENV DB_NAME="data/history.db"
+
 # Run the application
 CMD ["./site"]

@@ -9,7 +9,7 @@ func TestPagination(t *testing.T) {
 	dbPath := "test_pagination.db"
 	defer os.Remove(dbPath)
 
-	store, err := NewStore(dbPath)
+	store, err := NewStore("sqlite", dbPath)
 	if err != nil {
 		t.Fatalf("failed to create store: %v", err)
 	}
