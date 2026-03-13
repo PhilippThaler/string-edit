@@ -46,6 +46,9 @@ func run() error {
 		dbUser := os.Getenv("DB_USER")
 		dbPass := os.Getenv("DB_PASSWORD")
 		dbHost := os.Getenv("DB_HOST")
+		if dbHost == "" {
+			dbHost = "localhost"
+		}
 		dbNameEnv := os.Getenv("DB_NAME")
 
 		sslMode := os.Getenv("DB_SSLMODE")

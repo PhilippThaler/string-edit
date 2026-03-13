@@ -16,21 +16,30 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o site .
 
 # Stage 2: Create the minimal runtime image
-FROM alpine:latest
+FROM alpine:3.21.3
 
 WORKDIR /app
 
 # Install tzdata for timezone support
-RUN apk add --no-cache tzdata
+RUN apk add --no-cache tzdata=2026a-r0
+
+# Create a non-root user and set permissions for the app and data directories
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup && \
+    mkdir -p /app/data && \
+    chown -R appuser:appgroup /app
 
 # Copy the binary from the builder stage
 COPY --from=builder /app/site .
+RUN chown appuser:appgroup /app/site
+
+# Switch to the non-root user
+USER appuser
 
 # Expose the application port
 EXPOSE 8080
 
 # Create a volume for the database so data persists
-VOLUME /data
+VOLUME /app/data
 
 # Set default environment variables for database connection
 ENV DB_TYPE="sqlite"
