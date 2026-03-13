@@ -23,7 +23,7 @@ import (
 const (
 	defaultDBPath = "data/history.db"
 
-	pageSize                = 10
+	pageSize                = 30
 	maxLen                  = 500
 	defaultDBEntryText      = "Hello, World!"
 	defaultDBEntryIPAddress = "system"
