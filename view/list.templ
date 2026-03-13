@@ -5,7 +5,7 @@ import (
 	"strconv"
 )
 
-templ List(entries []storage.Entry) {
+templ List(entries []storage.Entry, page, totalPages int) {
 	@Layout() {
 		<h1>All Entries</h1>
 		<div class="list-container">
@@ -15,6 +15,19 @@ templ List(entries []storage.Entry) {
 					<span class="meta" style="float: right;">{ entry.CreatedAt.Format("Jan 02, 2006") }</span>
 					<div class="list-preview">{ entry.Content }</div>
 				</div>
+			}
+		</div>
+		<div class="controls">
+			if page > 1 {
+				<a href={ templ.SafeURL("/list?page=" + strconv.Itoa(page-1)) } class="btn nav-btn">&lt;</a>
+			} else {
+				<span class="btn nav-btn disabled">&lt;</span>
+			}
+			<span>Page { strconv.Itoa(page) } of { strconv.Itoa(totalPages) }</span>
+			if page < totalPages {
+				<a href={ templ.SafeURL("/list?page=" + strconv.Itoa(page+1)) } class="btn nav-btn">&gt;</a>
+			} else {
+				<span class="btn nav-btn disabled">&gt;</span>
 			}
 		</div>
 		<div class="controls">

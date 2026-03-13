@@ -84,8 +84,8 @@ func (s *Store) AddEntry(content, ip string) (int, error) {
 	return int(id), nil
 }
 
-func (s *Store) GetAllEntries() ([]Entry, error) {
-	rows, err := s.db.Query("SELECT id, content, created_at, ip_address FROM entries ORDER BY id DESC")
+func (s *Store) GetEntriesPaged(limit, offset int) ([]Entry, error) {
+	rows, err := s.db.Query("SELECT id, content, created_at, ip_address FROM entries ORDER BY id DESC LIMIT ? OFFSET ?", limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -100,6 +100,15 @@ func (s *Store) GetAllEntries() ([]Entry, error) {
 		entries = append(entries, e)
 	}
 	return entries, nil
+}
+
+func (s *Store) GetTotalCount() (int, error) {
+	var count int
+	err := s.db.QueryRow("SELECT COUNT(*) FROM entries").Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 // GetEntry retrieves a specific entry by ID

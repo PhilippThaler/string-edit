@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -12,6 +14,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"site/storage"
 	"site/view"
@@ -20,6 +23,7 @@ import (
 const (
 	defaultDBPath = "data/history.db"
 
+	pageSize                = 10
 	maxLen                  = 500
 	defaultDBEntryText      = "Hello, World!"
 	defaultDBEntryIPAddress = "system"
@@ -88,11 +92,7 @@ func newServer(store *storage.Store, loc *time.Location) http.Handler {
 	mux := http.NewServeMux()
 
 	// Redirect root to the newest entry
-	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" {
-			http.NotFound(w, r)
-			return
-		}
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		latest, err := store.GetLatestID()
 		if err != nil {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -132,6 +132,10 @@ func newServer(store *storage.Store, loc *time.Location) http.Handler {
 
 		entry, err := store.GetEntry(id)
 		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				http.NotFound(w, r)
+				return
+			}
 			http.Error(w, "Error retrieving entry", http.StatusInternalServerError)
 			return
 		}
@@ -162,14 +166,37 @@ func newServer(store *storage.Store, loc *time.Location) http.Handler {
 	})
 
 	mux.HandleFunc("GET /list", func(w http.ResponseWriter, r *http.Request) {
-		entries, err := store.GetAllEntries()
+		pageStr := r.URL.Query().Get("page")
+		page, err := strconv.Atoi(pageStr)
+		if err != nil || page < 1 {
+			page = 1
+		}
+
+		totalEntries, err := store.GetTotalCount()
+		if err != nil {
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			slog.Error("Could not get total entries", "error", err)
+			return
+		}
+
+		totalPages := (totalEntries + pageSize - 1) / pageSize
+		if totalPages == 0 {
+			totalPages = 1
+		}
+
+		if page > totalPages {
+			page = totalPages
+		}
+
+		offset := (page - 1) * pageSize
+		entries, err := store.GetEntriesPaged(pageSize, offset)
 		if err != nil {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			slog.Error("Could not get entries", "error", err)
 			return
 		}
 
-		err = view.List(entries).Render(r.Context(), w)
+		err = view.List(entries, page, totalPages).Render(r.Context(), w)
 		if err != nil {
 			slog.Error("Template execution error", "error", err)
 		}
@@ -183,7 +210,7 @@ func newServer(store *storage.Store, loc *time.Location) http.Handler {
 			http.Error(w, "Content cannot be empty", http.StatusBadRequest)
 			return
 		}
-		if len(newText) > maxLen {
+		if utf8.RuneCountInString(newText) > maxLen {
 			http.Error(w, fmt.Sprintf("Content too long (max %d chars)", maxLen), http.StatusBadRequest)
 			return
 		}
