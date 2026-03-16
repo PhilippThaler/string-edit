@@ -14,4 +14,3 @@ data/
 
 # Docker
 .dockerignore
-code-reviewer/
