@@ -1,0 +1,22 @@
+name: Mirror to Github
+
+"on": [push]
+
+jobs:
+  mirror_to_github:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push to Github Mirror
+        env:
+          GH_ACCESS_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
+          GH_REPO: "https://github.com/PhilippThaler/string-edit.git"
+        run: |
+          git remote add github https://oauth2:$GH_ACCESS_TOKEN@$GH_REPO
+          # Push all branches and tags
+          git push github --all --force
+          git push github --tags --force
