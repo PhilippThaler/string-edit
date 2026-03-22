@@ -38,37 +38,7 @@ func main() {
 }
 
 func run() error {
-	dbType := os.Getenv("DB_TYPE")
-	if dbType == "" {
-		dbType = "sqlite"
-	}
-
-	var dbName string
-	switch dbType {
-	case "sqlite":
-		dbName = os.Getenv("DB_NAME")
-		if dbName == "" {
-			dbName = defaultDBPath
-		}
-	case "postgres":
-		dbUser := os.Getenv("DB_USER")
-		dbPass := os.Getenv("DB_PASSWORD")
-		dbHost := os.Getenv("DB_HOST")
-		if dbHost == "" {
-			dbHost = "localhost"
-		}
-		dbNameEnv := os.Getenv("DB_NAME")
-
-		sslMode := os.Getenv("DB_SSLMODE")
-		if sslMode == "" {
-			sslMode = "disable"
-		}
-		dbName = fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=%s", dbUser, dbPass, dbHost, dbNameEnv, sslMode)
-	default:
-		return fmt.Errorf("unsupported DB_TYPE: %s", dbType)
-	}
-
-	store, err := storage.NewStore(dbType, dbName)
+	store, err := setupStore()
 	if err != nil {
 		return fmt.Errorf("failed to initialize database: %w", err)
 	}
@@ -332,4 +302,38 @@ func setupAutoPoster(ctx context.Context, store *storage.Store) {
 
 	poster := worker.NewAutoPoster(config)
 	go poster.Start(ctx)
+}
+
+func setupStore() (*storage.Store, error) {
+	dbType := os.Getenv("DB_TYPE")
+	if dbType == "" {
+		dbType = "sqlite"
+	}
+
+	var dbName string
+	switch dbType {
+	case "sqlite":
+		dbName = os.Getenv("DB_NAME")
+		if dbName == "" {
+			dbName = defaultDBPath
+		}
+	case "postgres":
+		dbUser := os.Getenv("DB_USER")
+		dbPass := os.Getenv("DB_PASSWORD")
+		dbHost := os.Getenv("DB_HOST")
+		if dbHost == "" {
+			dbHost = "localhost"
+		}
+		dbNameEnv := os.Getenv("DB_NAME")
+
+		sslMode := os.Getenv("DB_SSLMODE")
+		if sslMode == "" {
+			sslMode = "disable"
+		}
+		dbName = fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=%s", dbUser, dbPass, dbHost, dbNameEnv, sslMode)
+	default:
+		return nil, fmt.Errorf("unsupported DB_TYPE: %s", dbType)
+	}
+
+	return storage.NewStore(dbType, dbName)
 }
