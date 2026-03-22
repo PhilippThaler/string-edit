@@ -29,95 +29,6 @@ const (
 	defaultDBEntryIPAddress = "system"
 )
 
-func run() error {
-	dbType := os.Getenv("DB_TYPE")
-	if dbType == "" {
-		dbType = "sqlite"
-	}
-
-	var dbName string
-	switch dbType {
-	case "sqlite":
-		dbName = os.Getenv("DB_NAME")
-		if dbName == "" {
-			dbName = defaultDBPath
-		}
-	case "postgres":
-		dbUser := os.Getenv("DB_USER")
-		dbPass := os.Getenv("DB_PASSWORD")
-		dbHost := os.Getenv("DB_HOST")
-		if dbHost == "" {
-			dbHost = "localhost"
-		}
-		dbNameEnv := os.Getenv("DB_NAME")
-
-		sslMode := os.Getenv("DB_SSLMODE")
-		if sslMode == "" {
-			sslMode = "disable"
-		}
-		dbName = fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=%s", dbUser, dbPass, dbHost, dbNameEnv, sslMode)
-	default:
-		return fmt.Errorf("unsupported DB_TYPE: %s", dbType)
-	}
-
-	store, err := storage.NewStore(dbType, dbName)
-	if err != nil {
-		return fmt.Errorf("failed to initialize database: %w", err)
-	}
-	defer store.Close()
-
-	// Load Timezone
-	tz := os.Getenv("TZ")
-	if tz == "" {
-		tz = "UTC"
-	}
-	loc, err := time.LoadLocation(tz)
-	if err != nil {
-		slog.Warn("Invalid timezone, defaulting to UTC", "timezone", tz, "error", err)
-		loc = time.UTC
-	}
-
-	if latest, err := store.GetLatestID(); err != nil {
-		return fmt.Errorf("failed to get latest ID: %w", err)
-	} else if latest == 0 {
-		// If database is empty, create first entry
-		if _, err := store.AddEntry(defaultDBEntryText, defaultDBEntryIPAddress); err != nil {
-			return fmt.Errorf("failed to add initial entry: %w", err)
-		}
-	}
-
-	mux := newServer(store, loc)
-
-	srv := &http.Server{
-		Addr:    ":8080",
-		Handler: mux,
-	}
-
-	// Start server in a goroutine
-	go func() {
-		slog.Info("Server started at http://localhost:8080")
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			slog.Error("listen error", "error", err)
-		}
-	}()
-
-	// Wait for interrupt signal to gracefully shutdown the server with a timeout of 5 seconds.
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
-	<-quit
-	slog.Info("Shutting down server...")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := srv.Shutdown(ctx); err != nil {
-		return fmt.Errorf("server forced to shutdown: %w", err)
-	}
-
-	slog.Info("Server exiting")
-	return nil
-}
-
 func newServer(store *storage.Store, loc *time.Location) http.Handler {
 	mux := http.NewServeMux()
 
@@ -276,6 +187,95 @@ func newServer(store *storage.Store, loc *time.Location) http.Handler {
 		http.Redirect(w, r, fmt.Sprintf("/%d", newID), http.StatusFound)
 	})
 	return mux
+}
+
+func run() error {
+	dbType := os.Getenv("DB_TYPE")
+	if dbType == "" {
+		dbType = "sqlite"
+	}
+
+	var dbName string
+	switch dbType {
+	case "sqlite":
+		dbName = os.Getenv("DB_NAME")
+		if dbName == "" {
+			dbName = defaultDBPath
+		}
+	case "postgres":
+		dbUser := os.Getenv("DB_USER")
+		dbPass := os.Getenv("DB_PASSWORD")
+		dbHost := os.Getenv("DB_HOST")
+		if dbHost == "" {
+			dbHost = "localhost"
+		}
+		dbNameEnv := os.Getenv("DB_NAME")
+
+		sslMode := os.Getenv("DB_SSLMODE")
+		if sslMode == "" {
+			sslMode = "disable"
+		}
+		dbName = fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=%s", dbUser, dbPass, dbHost, dbNameEnv, sslMode)
+	default:
+		return fmt.Errorf("unsupported DB_TYPE: %s", dbType)
+	}
+
+	store, err := storage.NewStore(dbType, dbName)
+	if err != nil {
+		return fmt.Errorf("failed to initialize database: %w", err)
+	}
+	defer store.Close()
+
+	// Load Timezone
+	tz := os.Getenv("TZ")
+	if tz == "" {
+		tz = "UTC"
+	}
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		slog.Warn("Invalid timezone, defaulting to UTC", "timezone", tz, "error", err)
+		loc = time.UTC
+	}
+
+	if latest, err := store.GetLatestID(); err != nil {
+		return fmt.Errorf("failed to get latest ID: %w", err)
+	} else if latest == 0 {
+		// If database is empty, create first entry
+		if _, err := store.AddEntry(defaultDBEntryText, defaultDBEntryIPAddress); err != nil {
+			return fmt.Errorf("failed to add initial entry: %w", err)
+		}
+	}
+
+	mux := newServer(store, loc)
+
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: mux,
+	}
+
+	// Start server in a goroutine
+	go func() {
+		slog.Info("Server started at http://localhost:8080")
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("listen error", "error", err)
+		}
+	}()
+
+	// Wait for interrupt signal to gracefully shutdown the server with a timeout of 5 seconds.
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	<-quit
+	slog.Info("Shutting down server...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		return fmt.Errorf("server forced to shutdown: %w", err)
+	}
+
+	slog.Info("Server exiting")
+	return nil
 }
 
 func main() {
