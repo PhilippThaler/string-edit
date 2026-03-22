@@ -18,6 +18,7 @@ import (
 
 	"site/storage"
 	"site/view"
+	"site/worker"
 )
 
 const (
@@ -28,6 +29,109 @@ const (
 	defaultDBEntryText      = "Hello, World!"
 	defaultDBEntryIPAddress = "system"
 )
+
+func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "%s\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
+	dbType := os.Getenv("DB_TYPE")
+	if dbType == "" {
+		dbType = "sqlite"
+	}
+
+	var dbName string
+	switch dbType {
+	case "sqlite":
+		dbName = os.Getenv("DB_NAME")
+		if dbName == "" {
+			dbName = defaultDBPath
+		}
+	case "postgres":
+		dbUser := os.Getenv("DB_USER")
+		dbPass := os.Getenv("DB_PASSWORD")
+		dbHost := os.Getenv("DB_HOST")
+		if dbHost == "" {
+			dbHost = "localhost"
+		}
+		dbNameEnv := os.Getenv("DB_NAME")
+
+		sslMode := os.Getenv("DB_SSLMODE")
+		if sslMode == "" {
+			sslMode = "disable"
+		}
+		dbName = fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=%s", dbUser, dbPass, dbHost, dbNameEnv, sslMode)
+	default:
+		return fmt.Errorf("unsupported DB_TYPE: %s", dbType)
+	}
+
+	store, err := storage.NewStore(dbType, dbName)
+	if err != nil {
+		return fmt.Errorf("failed to initialize database: %w", err)
+	}
+	defer store.Close()
+
+	// Load Timezone
+	tz := os.Getenv("TZ")
+	if tz == "" {
+		tz = "UTC"
+	}
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		slog.Warn("Invalid timezone, defaulting to UTC", "timezone", tz, "error", err)
+		loc = time.UTC
+	}
+
+	if latest, err := store.GetLatestID(); err != nil {
+		return fmt.Errorf("failed to get latest ID: %w", err)
+	} else if latest == 0 {
+		// If database is empty, create first entry
+		if _, err := store.AddEntry(defaultDBEntryText, defaultDBEntryIPAddress); err != nil {
+			return fmt.Errorf("failed to add initial entry: %w", err)
+		}
+	}
+
+	mux := newServer(store, loc)
+
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: mux,
+	}
+
+	// Start server in a goroutine
+	go func() {
+		slog.Info("Server started at http://localhost:8080")
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("listen error", "error", err)
+		}
+	}()
+
+	// Wait for interrupt signal to gracefully shutdown the server with a timeout of 5 seconds.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	if os.Getenv("AUTOPOSTER_ENABLE") == "true" {
+		setupAutoPoster(ctx, store)
+	} else {
+		slog.Info("AutoPoster service is disabled")
+	}
+
+	<-ctx.Done()
+	slog.Info("Shutting down server...")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		return fmt.Errorf("server forced to shutdown: %w", err)
+	}
+
+	slog.Info("Server exiting")
+	return nil
+}
 
 func newServer(store *storage.Store, loc *time.Location) http.Handler {
 	mux := http.NewServeMux()
@@ -189,98 +293,43 @@ func newServer(store *storage.Store, loc *time.Location) http.Handler {
 	return mux
 }
 
-func run() error {
-	dbType := os.Getenv("DB_TYPE")
-	if dbType == "" {
-		dbType = "sqlite"
+func setupAutoPoster(ctx context.Context, store *storage.Store) {
+	intervalStr := os.Getenv("AUTOPOSTER_INTERVAL")
+	if intervalStr == "" {
+		intervalStr = "10s"
+		slog.Info("AUTOPOSTER_INTERVAL not set. Using %s as fallback")
 	}
 
-	var dbName string
-	switch dbType {
-	case "sqlite":
-		dbName = os.Getenv("DB_NAME")
-		if dbName == "" {
-			dbName = defaultDBPath
-		}
-	case "postgres":
-		dbUser := os.Getenv("DB_USER")
-		dbPass := os.Getenv("DB_PASSWORD")
-		dbHost := os.Getenv("DB_HOST")
-		if dbHost == "" {
-			dbHost = "localhost"
-		}
-		dbNameEnv := os.Getenv("DB_NAME")
-
-		sslMode := os.Getenv("DB_SSLMODE")
-		if sslMode == "" {
-			sslMode = "disable"
-		}
-		dbName = fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=%s", dbUser, dbPass, dbHost, dbNameEnv, sslMode)
-	default:
-		return fmt.Errorf("unsupported DB_TYPE: %s", dbType)
-	}
-
-	store, err := storage.NewStore(dbType, dbName)
+	interval, err := time.ParseDuration(intervalStr)
 	if err != nil {
-		return fmt.Errorf("failed to initialize database: %w", err)
-	}
-	defer store.Close()
-
-	// Load Timezone
-	tz := os.Getenv("TZ")
-	if tz == "" {
-		tz = "UTC"
-	}
-	loc, err := time.LoadLocation(tz)
-	if err != nil {
-		slog.Warn("Invalid timezone, defaulting to UTC", "timezone", tz, "error", err)
-		loc = time.UTC
+		slog.Error("Invalid AUTOPOSTER_INTERVAL, skipping AutoPoster", "error", err, "value", intervalStr)
+		return
 	}
 
-	if latest, err := store.GetLatestID(); err != nil {
-		return fmt.Errorf("failed to get latest ID: %w", err)
-	} else if latest == 0 {
-		// If database is empty, create first entry
-		if _, err := store.AddEntry(defaultDBEntryText, defaultDBEntryIPAddress); err != nil {
-			return fmt.Errorf("failed to add initial entry: %w", err)
-		}
+	apiURL := os.Getenv("AUTOPOSTER_URL")
+	if apiURL == "" {
+		slog.Error("AUTOPOSTER_URL not set, skipping AutoPoster")
+		return
 	}
 
-	mux := newServer(store, loc)
-
-	srv := &http.Server{
-		Addr:    ":8080",
-		Handler: mux,
+	model := os.Getenv("AUTOPOSTER_MODEL")
+	if model == "" {
+		model = "gemini-3.1-flash-lite-preview"
 	}
 
-	// Start server in a goroutine
-	go func() {
-		slog.Info("Server started at http://localhost:8080")
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			slog.Error("listen error", "error", err)
-		}
-	}()
-
-	// Wait for interrupt signal to gracefully shutdown the server with a timeout of 5 seconds.
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
-	<-quit
-	slog.Info("Shutting down server...")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := srv.Shutdown(ctx); err != nil {
-		return fmt.Errorf("server forced to shutdown: %w", err)
+	prompt := os.Getenv("AUTOPOSTER_PROMPT")
+	if prompt == "" {
+		prompt = "Write a unique, short poem (under 500 chars). Use a current timestamp to ensure a completely original theme and structure every time."
 	}
 
-	slog.Info("Server exiting")
-	return nil
-}
-
-func main() {
-	if err := run(); err != nil {
-		fmt.Fprintf(os.Stderr, "%s\n", err)
-		os.Exit(1)
+	config := worker.AutoPosterConfig{
+		Store:    store,
+		Interval: interval,
+		URL:      apiURL,
+		Model:    model,
+		Prompt:   prompt,
 	}
+
+	poster := worker.NewAutoPoster(config)
+	go poster.Start(ctx)
 }
