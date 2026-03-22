@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 	"unicode/utf8"
@@ -83,8 +84,9 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	var wg sync.WaitGroup
 	if os.Getenv("AUTOPOSTER_ENABLE") == "true" {
-		setupAutoPoster(ctx, store)
+		setupAutoPoster(ctx, store, &wg)
 	} else {
 		slog.Info("AutoPoster service is disabled")
 	}
@@ -98,6 +100,9 @@ func run() error {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("server forced to shutdown: %w", err)
 	}
+
+	slog.Info("Waiting for background workers to finish...")
+	wg.Wait()
 
 	slog.Info("Server exiting")
 	return nil
@@ -263,7 +268,7 @@ func newServer(store *storage.Store, loc *time.Location) http.Handler {
 	return mux
 }
 
-func setupAutoPoster(ctx context.Context, store *storage.Store) {
+func setupAutoPoster(ctx context.Context, store *storage.Store, wg *sync.WaitGroup) {
 	intervalStr := os.Getenv("AUTOPOSTER_INTERVAL")
 	if intervalStr == "" {
 		intervalStr = "10s"
@@ -301,7 +306,11 @@ func setupAutoPoster(ctx context.Context, store *storage.Store) {
 	}
 
 	poster := worker.NewAutoPoster(config)
-	go poster.Start(ctx)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		poster.Start(ctx)
+	}()
 }
 
 func setupStore() (*storage.Store, error) {
