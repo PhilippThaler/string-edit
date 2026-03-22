@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math/rand/v2"
 	"net/http"
 	"time"
 
@@ -27,7 +28,7 @@ type AutoPosterConfig struct {
 	Interval time.Duration
 	URL      string
 	Model    string
-	Prompt   string
+	Prompts  []string
 }
 
 type AutoPoster struct {
@@ -44,7 +45,7 @@ func (p *AutoPoster) getText() (string, error) {
 	var textService TextService
 	textService.URL = p.config.URL
 	textService.Model = p.config.Model
-	textService.Prompt = p.config.Prompt
+	textService.Prompt = p.config.Prompts[rand.IntN(len(p.config.Prompts))]
 
 	body, err := json.Marshal(&textService)
 	if err != nil {
@@ -83,7 +84,7 @@ func (p *AutoPoster) Start(ctx context.Context) {
 				slog.Error("AutoPoster failed to get Post from TextService", "error", err)
 				continue
 			}
-			if _, err := p.config.Store.AddEntry(newText, "system-worker"); err != nil {
+			if _, err := p.config.Store.AddEntry(newText, "system-autoposter-worker"); err != nil {
 				slog.Error("AutoPoster failed to add entry", "error", err)
 			} else {
 				slog.Info("AutoPoster created a new entry")

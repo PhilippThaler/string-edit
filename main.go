@@ -267,7 +267,7 @@ func setupAutoPoster(ctx context.Context, store *storage.Store) {
 	intervalStr := os.Getenv("AUTOPOSTER_INTERVAL")
 	if intervalStr == "" {
 		intervalStr = "10s"
-		slog.Info("AUTOPOSTER_INTERVAL not set. Using %s as fallback")
+		slog.Info(fmt.Sprintf("AUTOPOSTER_INTERVAL not set. Using %s as fallback", intervalStr))
 	}
 
 	interval, err := time.ParseDuration(intervalStr)
@@ -287,9 +287,9 @@ func setupAutoPoster(ctx context.Context, store *storage.Store) {
 		model = "gemini-3.1-flash-lite-preview"
 	}
 
-	prompt := os.Getenv("AUTOPOSTER_PROMPT")
-	if prompt == "" {
-		prompt = "Write a unique, short poem (under 500 chars). Use a current timestamp to ensure a completely original theme and structure every time."
+	prompts := os.Getenv("AUTOPOSTER_PROMPT")
+	if prompts == "" {
+		prompts = "Write a unique, short poem (under 500 chars). Use a current timestamp to ensure a completely original theme and structure every time."
 	}
 
 	config := worker.AutoPosterConfig{
@@ -297,7 +297,7 @@ func setupAutoPoster(ctx context.Context, store *storage.Store) {
 		Interval: interval,
 		URL:      apiURL,
 		Model:    model,
-		Prompt:   prompt,
+		Prompts:  strings.Split(prompts, ";"),
 	}
 
 	poster := worker.NewAutoPoster(config)
