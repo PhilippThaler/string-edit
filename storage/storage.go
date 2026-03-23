@@ -174,3 +174,16 @@ func (s *Store) GetLatestID() (int, error) {
 	}
 	return int(id.Int64), nil
 }
+
+func (s *Store) RemoveEntry(id int) error {
+	query := "DELETE FROM entries WHERE id = ?"
+	switch s.dbType {
+	case "postgres":
+		query = "DELETE FROM entries WHERE id = $1"
+	}
+	_, err := s.db.Exec(query, id)
+	if err != nil {
+		return err
+	}
+	return nil
+}

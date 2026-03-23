@@ -14,9 +14,10 @@ import (
 )
 
 type TextService struct {
-	URL    string `json:"-"`
-	Model  string `json:"model"`
-	Prompt string `json:"prompt"`
+	URL                string `json:"-"`
+	Model              string `json:"model"`
+	Prompt             string `json:"prompt"`
+	SystemInstructions string `json:"system_instructions"`
 }
 
 type TextResponse struct {

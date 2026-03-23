@@ -28,7 +28,7 @@ func TestListPagination(t *testing.T) {
 	}
 
 	loc := time.UTC
-	mux := newServer(store, loc)
+	mux := newServer(store, loc, nil)
 
 	// Test page 1
 	req := httptest.NewRequest("GET", "/list?page=1", nil)

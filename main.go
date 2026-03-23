@@ -65,7 +65,26 @@ func run() error {
 		}
 	}
 
-	mux := newServer(store, loc)
+	// Wait for interrupt signal to gracefully shutdown the server with a timeout of 5 seconds.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	var wg sync.WaitGroup
+	if os.Getenv("AUTOPOSTER_ENABLE") == "true" {
+		setupAutoPoster(ctx, store, &wg)
+	} else {
+		slog.Info("AutoPoster service is disabled")
+	}
+
+	var jobQueue chan int
+	if os.Getenv("MODERATOR_ENABLE") == "true" {
+		jobQueue = make(chan int, 100)
+		setupModerator(ctx, store, &wg, jobQueue)
+	} else {
+		slog.Info("Moderator service is disabled")
+	}
+
+	mux := newServer(store, loc, jobQueue)
 
 	srv := &http.Server{
 		Addr:    ":8080",
@@ -79,17 +98,6 @@ func run() error {
 			slog.Error("listen error", "error", err)
 		}
 	}()
-
-	// Wait for interrupt signal to gracefully shutdown the server with a timeout of 5 seconds.
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	var wg sync.WaitGroup
-	if os.Getenv("AUTOPOSTER_ENABLE") == "true" {
-		setupAutoPoster(ctx, store, &wg)
-	} else {
-		slog.Info("AutoPoster service is disabled")
-	}
 
 	<-ctx.Done()
 	slog.Info("Shutting down server...")
@@ -108,7 +116,7 @@ func run() error {
 	return nil
 }
 
-func newServer(store *storage.Store, loc *time.Location) http.Handler {
+func newServer(store *storage.Store, loc *time.Location, jobQueue chan<- int) http.Handler {
 	mux := http.NewServeMux()
 
 	// Redirect root to the newest entry
@@ -263,6 +271,14 @@ func newServer(store *storage.Store, loc *time.Location) http.Handler {
 		}
 		slog.Info("Added Entry", "ip", ip, "text", newText)
 
+		if jobQueue != nil {
+			select {
+			case jobQueue <- newID:
+			default:
+				slog.Warn("Moderator queue full, skipping moderation", "id", newID)
+			}
+		}
+
 		http.Redirect(w, r, fmt.Sprintf("/%d", newID), http.StatusFound)
 	})
 	return mux
@@ -306,11 +322,34 @@ func setupAutoPoster(ctx context.Context, store *storage.Store, wg *sync.WaitGro
 	}
 
 	poster := worker.NewAutoPoster(config)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		poster.Start(ctx)
-	}()
+	})
+}
+
+func setupModerator(ctx context.Context, store *storage.Store, wg *sync.WaitGroup, jobQueue <-chan int) {
+	apiURL := os.Getenv("MODERATOR_URL")
+	if apiURL == "" {
+		slog.Error("MODERATOR_URL not set, skipping Moderator")
+		return
+	}
+
+	model := os.Getenv("MODERATOR_MODEL")
+	if model == "" {
+		model = "gemini-3.1-flash-lite-preview"
+	}
+
+	config := worker.ModeratorConfig{
+		Store:    store,
+		JobQueue: jobQueue,
+		URL:      apiURL,
+		Model:    model,
+	}
+
+	moderator := worker.NewModerator(config)
+	wg.Go(func() {
+		moderator.Start(ctx)
+	})
 }
 
 func setupStore() (*storage.Store, error) {
