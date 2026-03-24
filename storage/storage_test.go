@@ -43,7 +43,7 @@ func testPrevID(currentID, expectedPrevID int, store *Store, t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get entry: %v", err)
 	}
-	prevID, err := store.GetPrevID(entry.ID, entry.CreatedAt.String())
+	prevID, err := store.GetPrevID(entry.ID, entry.CreatedAt)
 	if err != nil {
 		t.Fatalf("failed to get prevID: %v", err)
 	}
@@ -57,7 +57,7 @@ func testNextID(currentID, expectedNextID int, store *Store, t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get entry: %v", err)
 	}
-	nextID, err := store.GetNextID(entry.ID, entry.CreatedAt.String())
+	nextID, err := store.GetNextID(entry.ID, entry.CreatedAt)
 	if err != nil {
 		t.Fatalf("failed to get prevID: %v", err)
 	}

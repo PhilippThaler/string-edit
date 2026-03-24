@@ -215,7 +215,7 @@ func (s *Store) GetLatestActiveID() (int, error) {
 	return int(id.Int64), nil
 }
 
-func (s *Store) GetPrevID(currentID int, currentTimestamp string) (int, error) {
+func (s *Store) GetPrevID(currentID int, currentTimestamp time.Time) (int, error) {
 	var prevID int
 	query := `SELECT id FROM active_entries 
 		WHERE (created_at, id) < (?, ?) 
@@ -236,7 +236,7 @@ func (s *Store) GetPrevID(currentID int, currentTimestamp string) (int, error) {
 	return prevID, nil
 }
 
-func (s *Store) GetNextID(currentID int, currentTimestamp string) (int, error) {
+func (s *Store) GetNextID(currentID int, currentTimestamp time.Time) (int, error) {
 	var nextID int
 	query := `SELECT id FROM active_entries 
 		WHERE (created_at, id) > (?, ?) 

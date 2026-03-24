@@ -169,7 +169,7 @@ func newServer(store *storage.Store, loc *time.Location, jobQueue chan<- int) ht
 		}
 
 		var prevLink string
-		prevID, err := store.GetPrevID(entry.ID, entry.CreatedAt.String())
+		prevID, err := store.GetPrevID(entry.ID, entry.CreatedAt)
 		if err != nil || prevID == 0 {
 			prevLink = ""
 		} else {
@@ -177,7 +177,7 @@ func newServer(store *storage.Store, loc *time.Location, jobQueue chan<- int) ht
 		}
 
 		var nextLink string
-		nextID, err := store.GetNextID(entry.ID, entry.CreatedAt.String())
+		nextID, err := store.GetNextID(entry.ID, entry.CreatedAt)
 		if err != nil || nextID == 0 {
 			nextLink = ""
 		} else {
