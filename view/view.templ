@@ -2,13 +2,17 @@ package view
 
 import "strconv"
 
-templ View(content, timestamp, prevLink, nextLink, editLink string, currentIndex, totalCount int) {
+templ View(content, timestamp, prevLink, nextLink, newEntryLink string, currentIndex int, isDeleted bool) {
 	@Layout() {
 		<div class="status">
-			Entry { strconv.Itoa(currentIndex) } of { strconv.Itoa(totalCount) }
+			Entry { strconv.Itoa(currentIndex) }
 			<div class="meta">{ timestamp }</div>
 		</div>
-		<div class="content">{ content }</div>
+		if !isDeleted {
+			<div class="content">{ content }</div>
+		} else {
+			<div class="content deleted">This Entry has been deleted!</div>
+		}
 		<div class="controls">
 			if prevLink != "" {
 				<a href={ templ.SafeURL(prevLink) } class="btn nav-btn">&lt;</a>
@@ -16,7 +20,7 @@ templ View(content, timestamp, prevLink, nextLink, editLink string, currentIndex
 				<span class="btn nav-btn disabled">&lt;</span>
 			}
 			<a href="/list" class="btn">List All</a>
-			<a href={ templ.SafeURL(editLink) } class="btn">New Entry</a>
+			<a href={ templ.SafeURL(newEntryLink) } class="btn">New Entry</a>
 			if nextLink != "" {
 				<a href={ templ.SafeURL(nextLink) } class="btn nav-btn">&gt;</a>
 			} else {

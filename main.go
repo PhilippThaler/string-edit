@@ -168,14 +168,20 @@ func newServer(store *storage.Store, loc *time.Location, jobQueue chan<- int) ht
 			return
 		}
 
-		prevLink := ""
-		if id > 1 {
-			prevLink = fmt.Sprintf("/%d", id-1)
+		var prevLink string
+		prevID, err := store.GetPrevID(entry.ID, entry.CreatedAt.String())
+		if err != nil || prevID == 0 {
+			prevLink = ""
+		} else {
+			prevLink = fmt.Sprintf("/%d", prevID)
 		}
 
-		nextLink := ""
-		if id < latest {
-			nextLink = fmt.Sprintf("/%d", id+1)
+		var nextLink string
+		nextID, err := store.GetNextID(entry.ID, entry.CreatedAt.String())
+		if err != nil || nextID == 0 {
+			nextLink = ""
+		} else {
+			nextLink = fmt.Sprintf("/%d", nextID)
 		}
 
 		err = view.View(
@@ -185,7 +191,7 @@ func newServer(store *storage.Store, loc *time.Location, jobQueue chan<- int) ht
 			nextLink,
 			"/new",
 			id,
-			latest,
+			entry.IsDeleted,
 		).Render(r.Context(), w)
 
 		if err != nil {
@@ -217,7 +223,7 @@ func newServer(store *storage.Store, loc *time.Location, jobQueue chan<- int) ht
 		}
 
 		offset := (page - 1) * pageSize
-		entries, err := store.GetEntriesPaged(pageSize, offset)
+		entries, err := store.GetActiveEntriesPaged(pageSize, offset)
 		if err != nil {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			slog.Error("Could not get entries", "error", err)
