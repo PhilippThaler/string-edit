@@ -121,7 +121,7 @@ func newServer(store *storage.Store, loc *time.Location, jobQueue chan<- int) ht
 
 	// Redirect root to the newest entry
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		latest, err := store.GetLatestID()
+		latest, err := store.GetLatestActiveID()
 		if err != nil {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			slog.Error("Could not get latest ID", "error", err)
