@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	sq "github.com/Masterminds/squirrel"
 	_ "github.com/lib/pq"
 	_ "modernc.org/sqlite"
 )
@@ -21,8 +22,9 @@ type Entry struct {
 
 // Store handles database interactions
 type Store struct {
-	db     *sql.DB
-	dbType string
+	db      *sql.DB
+	dbType  string
+	builder sq.StatementBuilderType
 }
 
 // NewStore initializes the database and returns a Store instance
@@ -39,6 +41,13 @@ func NewStore(dbType, dbName string) (*Store, error) {
 	db, err := sql.Open(dbType, dbName)
 	if err != nil {
 		return nil, err
+	}
+
+	var builder sq.StatementBuilderType
+	if dbType == "postgres" {
+		builder = sq.StatementBuilder.PlaceholderFormat(sq.Dollar).RunWith(db)
+	} else {
+		builder = sq.StatementBuilder.PlaceholderFormat(sq.Question).RunWith(db)
 	}
 
 	var createTableSQL string
@@ -108,7 +117,11 @@ func NewStore(dbType, dbName string) (*Store, error) {
 		return nil, err
 	}
 
-	return &Store{db: db, dbType: dbType}, nil
+	return &Store{
+		db:      db,
+		dbType:  dbType,
+		builder: builder,
+	}, nil
 }
 
 // Close closes the database connection
@@ -118,43 +131,31 @@ func (s *Store) Close() error {
 
 // AddEntry inserts a new entry into the database
 func (s *Store) AddEntry(content, ip string) (int, error) {
-	switch s.dbType {
-	case "postgres":
-		query := "INSERT INTO entries(content, created_at, ip_address) VALUES($1, $2, $3) RETURNING id"
+	query := s.builder.Insert("entries").
+		Columns("content", "created_at", "ip_address").
+		Values(content, time.Now().UTC(), ip)
+
+	if s.dbType == "postgres" {
 		var id int
-		err := s.db.QueryRow(query, content, time.Now().UTC(), ip).Scan(&id)
-		if err != nil {
-			return 0, err
-		}
-		return id, nil
-	default:
-		query := "INSERT INTO entries(content, created_at, ip_address) VALUES(?, ?, ?)"
-		stmt, err := s.db.Prepare(query)
-		if err != nil {
-			return 0, err
-		}
-		defer stmt.Close()
-
-		res, err := stmt.Exec(content, time.Now().UTC(), ip)
-		if err != nil {
-			return 0, err
-		}
-
-		id, err := res.LastInsertId()
-		if err != nil {
-			return 0, err
-		}
-		return int(id), nil
+		err := query.Suffix("RETURNING id").QueryRow().Scan(&id)
+		return id, err
 	}
+
+	res, err := query.Exec()
+	if err != nil {
+		return 0, err
+	}
+	id, err := res.LastInsertId()
+	return int(id), err
 }
 
 func (s *Store) GetActiveEntriesPaged(limit, offset int) ([]Entry, error) {
-	query := "SELECT id, content, created_at, ip_address FROM active_entries ORDER BY id DESC LIMIT ? OFFSET ?"
-	switch s.dbType {
-	case "postgres":
-		query = "SELECT id, content, created_at, ip_address FROM active_entries ORDER BY id DESC LIMIT $1 OFFSET $2"
-	}
-	rows, err := s.db.Query(query, limit, offset)
+	rows, err := s.builder.Select("id, content, created_at, ip_address").
+		From("active_entries").
+		OrderBy("id DESC").
+		Limit(uint64(limit)).
+		Offset(uint64(offset)).Query()
+
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +174,12 @@ func (s *Store) GetActiveEntriesPaged(limit, offset int) ([]Entry, error) {
 
 func (s *Store) GetTotalCount() (int, error) {
 	var count int
-	err := s.db.QueryRow("SELECT COUNT(*) FROM entries").Scan(&count)
+
+	err := s.builder.Select("COUNT(*)").
+		From("entries").
+		QueryRow().
+		Scan(&count)
+
 	if err != nil {
 		return 0, err
 	}
@@ -182,7 +188,12 @@ func (s *Store) GetTotalCount() (int, error) {
 
 func (s *Store) GetTotalActiveCount() (int, error) {
 	var count int
-	err := s.db.QueryRow("SELECT COUNT(*) FROM active_entries").Scan(&count)
+
+	err := s.builder.Select("COUNT(*)").
+		From("active_entries").
+		QueryRow().
+		Scan(&count)
+
 	if err != nil {
 		return 0, err
 	}
@@ -192,13 +203,13 @@ func (s *Store) GetTotalActiveCount() (int, error) {
 // GetEntry retrieves a specific entry by ID
 func (s *Store) GetEntry(id int) (*Entry, error) {
 	var e Entry
-	query := "SELECT id, content, created_at, ip_address, is_deleted FROM entries WHERE id = ?"
-	switch s.dbType {
-	case "postgres":
-		query = "SELECT id, content, created_at, ip_address, is_deleted FROM entries WHERE id = $1"
-	}
-	err := s.db.QueryRow(query, id).
+
+	err := s.builder.Select("id", "content", "created_at", "ip_address", "is_deleted").
+		From("entries").
+		Where(sq.Eq{"id": id}).
+		QueryRow().
 		Scan(&e.ID, &e.Content, &e.CreatedAt, &e.IPAddress, &e.IsDeleted)
+
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +219,12 @@ func (s *Store) GetEntry(id int) (*Entry, error) {
 // GetLatestID returns the ID of the most recent entry
 func (s *Store) GetLatestID() (int, error) {
 	var id sql.NullInt64
-	err := s.db.QueryRow("SELECT MAX(id) FROM entries").Scan(&id)
+
+	err := s.builder.Select("MAX(id)").
+		From("entries").
+		QueryRow().
+		Scan(&id)
+
 	if err != nil {
 		return 0, err
 	}
@@ -222,7 +238,12 @@ func (s *Store) GetLatestID() (int, error) {
 // GetLatestID returns the ID of the most recent entry
 func (s *Store) GetLatestActiveID() (int, error) {
 	var id sql.NullInt64
-	err := s.db.QueryRow("SELECT MAX(id) FROM active_entries").Scan(&id)
+
+	err := s.builder.Select("MAX(id)").
+		From("active_entries").
+		QueryRow().
+		Scan(&id)
+
 	if err != nil {
 		return 0, err
 	}
@@ -235,16 +256,15 @@ func (s *Store) GetLatestActiveID() (int, error) {
 
 func (s *Store) GetPrevID(currentID int, currentTimestamp time.Time) (int, error) {
 	var prevID int
-	query := `SELECT id FROM active_entries 
-		WHERE (created_at, id) < (?, ?) 
-		ORDER BY created_at DESC, id DESC LIMIT 1`
-	switch s.dbType {
-	case "postgres":
-		query = `SELECT id FROM active_entries 
-		WHERE (created_at, id) < ($1, $2) 
-		ORDER BY created_at DESC, id DESC LIMIT 1`
-	}
-	err := s.db.QueryRow(query, currentTimestamp, currentID).Scan(&prevID)
+
+	err := s.builder.Select("id").
+		From("active_entries").
+		Where(sq.Expr("(created_at, id) < (?, ?)", currentTimestamp, currentID)).
+		OrderBy("created_at DESC", "id DESC").
+		Limit(1).
+		QueryRow().
+		Scan(&prevID)
+
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return 0, nil
@@ -256,16 +276,15 @@ func (s *Store) GetPrevID(currentID int, currentTimestamp time.Time) (int, error
 
 func (s *Store) GetNextID(currentID int, currentTimestamp time.Time) (int, error) {
 	var nextID int
-	query := `SELECT id FROM active_entries 
-		WHERE (created_at, id) > (?, ?) 
-		ORDER BY created_at ASC, id ASC LIMIT 1`
-	switch s.dbType {
-	case "postgres":
-		query = `SELECT id FROM active_entries 
-		WHERE (created_at, id) > ($1, $2) 
-		ORDER BY created_at ASC, id ASC LIMIT 1`
-	}
-	err := s.db.QueryRow(query, currentTimestamp, currentID).Scan(&nextID)
+
+	err := s.builder.Select("id").
+		From("active_entries").
+		Where(sq.Expr("(created_at, id) > (?, ?)", currentTimestamp, currentID)).
+		OrderBy("created_at ASC", "id ASC").
+		Limit(1).
+		QueryRow().
+		Scan(&nextID)
+
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return 0, nil
@@ -276,12 +295,11 @@ func (s *Store) GetNextID(currentID int, currentTimestamp time.Time) (int, error
 }
 
 func (s *Store) RemoveEntry(id int) error {
-	query := "UPDATE entries SET is_deleted=true WHERE id=?;"
-	switch s.dbType {
-	case "postgres":
-		query = "UPDATE entries SET is_deleted=true WHERE id=$1;"
-	}
-	_, err := s.db.Exec(query, id)
+	_, err := s.builder.Update("entries").
+		Set("is_deleted", true).
+		Where(sq.Eq{"id": id}).
+		Exec()
+
 	if err != nil {
 		return err
 	}
