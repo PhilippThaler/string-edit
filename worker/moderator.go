@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"site/storage"
+	"time"
 )
 
 type ModeratorConfig struct {
@@ -39,7 +40,7 @@ func (m *Moderator) Start(ctx context.Context) {
 			if err != nil {
 				slog.Error("Failed to Moderate Post in Textservice", "error", err)
 			}
-			if !isApproved {
+			if err == nil && !isApproved {
 				if err = m.config.Store.RemoveEntry(postID); err != nil {
 					slog.Error("Couldn't delete Post", "error", err)
 				}
@@ -62,18 +63,22 @@ func (m *Moderator) isPostApproved(text string) (bool, error) {
 
 	body, err := json.Marshal(&req)
 	if err != nil {
-		return true, fmt.Errorf("Failed to encode JSON: %w", err)
+		return false, fmt.Errorf("Failed to encode JSON: %w", err)
 	}
 
-	resp, err := http.Post(m.config.URL, "application/json", bytes.NewBuffer(body))
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	resp, err := client.Post(m.config.URL, "application/json", bytes.NewBuffer(body))
 	if err != nil {
-		return true, fmt.Errorf("Couldn't get moderation response: %w", err)
+		return false, fmt.Errorf("Couldn't get moderation response: %w", err)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return true, fmt.Errorf("Couldn't get moderation response. Statuscode: %d", resp.StatusCode)
+		return false, fmt.Errorf("Couldn't get moderation response. Statuscode: %d", resp.StatusCode)
 	}
 
 	type AIResult struct {
@@ -83,7 +88,7 @@ func (m *Moderator) isPostApproved(text string) (bool, error) {
 
 	var aiResult AIResult
 	if err := json.NewDecoder(resp.Body).Decode(&aiResult); err != nil {
-		return true, fmt.Errorf("Failed to decode JSON response: %w", err)
+		return false, fmt.Errorf("Failed to decode JSON response: %w", err)
 	}
 
 	slog.Info("Moderation complete", "approved", aiResult.IsApproved, "reason", aiResult.Reason)

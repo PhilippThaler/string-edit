@@ -53,7 +53,11 @@ func (p *AutoPoster) getText() (string, error) {
 		return "", fmt.Errorf("Failed to encode JSON: %w", err)
 	}
 
-	resp, err := http.Post(textService.URL, "application/json", bytes.NewBuffer(body))
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	resp, err := client.Post(textService.URL, "application/json", bytes.NewBuffer(body))
 	if err != nil {
 		return "", fmt.Errorf("Couldn't get Text from TextService: %w", err)
 	}
