@@ -42,6 +42,7 @@ func NewStore(dbType, dbName string) (*Store, error) {
 	}
 
 	var createTableSQL string
+	var createActiveViewSQL string
 	var createDeletedIndexSQL string
 	switch dbType {
 	case "sqlite":
@@ -58,6 +59,17 @@ func NewStore(dbType, dbName string) (*Store, error) {
 			ip_address TEXT,
 			is_deleted BOOLEAN DEFAULT false
 		);`
+		createActiveViewSQL = `
+			CREATE VIEW IF NOT EXISTS active_entries AS 
+				SELECT id, content, created_at, ip_address 
+				FROM entries
+				WHERE is_deleted = false;
+	`
+		createDeletedIndexSQL = `
+			CREATE INDEX IF NOT EXISTS idx_active_entries 
+				ON entries (created_at DESC, id) 
+				WHERE is_deleted = false;
+		`
 	case "postgres":
 		if err := db.Ping(); err != nil {
 			db.Close()
@@ -70,18 +82,24 @@ func NewStore(dbType, dbName string) (*Store, error) {
 			ip_address TEXT,
 			is_deleted BOOLEAN DEFAULT false
 		);`
-	}
-	createDeletedIndexSQL = `
-			CREATE INDEX IF NOT EXISTS idx_active_entries 
-				ON entries (created_at DESC, id) 
-				WHERE is_deleted = false;
-			CREATE VIEW IF NOT EXISTS active_entries AS 
+		createActiveViewSQL = `
+			CREATE OR REPLACE VIEW active_entries AS 
 				SELECT id, content, created_at, ip_address 
 				FROM entries
 				WHERE is_deleted = false;
+	`
+		createDeletedIndexSQL = `
+			CREATE INDEX IF NOT EXISTS idx_active_entries 
+				ON entries (created_at DESC, id) 
+				WHERE is_deleted = false;
 		`
+	}
 
 	if _, err := db.Exec(createTableSQL); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if _, err := db.Exec(createActiveViewSQL); err != nil {
 		db.Close()
 		return nil, err
 	}
