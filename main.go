@@ -17,6 +17,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"site/middleware"
 	"site/storage"
 	"site/view"
 	"site/worker"
@@ -84,11 +85,13 @@ func run() error {
 		slog.Info("Moderator service is disabled")
 	}
 
+	rateLimiter := middleware.NewIPRateLimiter(2, 5)
+
 	mux := newServer(store, loc, jobQueue)
 
 	srv := &http.Server{
 		Addr:    ":8080",
-		Handler: mux,
+		Handler: rateLimiter.Middleware(mux),
 	}
 
 	// Start server in a goroutine
