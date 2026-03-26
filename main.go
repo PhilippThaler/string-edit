@@ -294,15 +294,31 @@ func newServer(store *storage.Store, loc *time.Location, jobQueue chan<- int) ht
 }
 
 func setupAutoPoster(ctx context.Context, store *storage.Store, wg *sync.WaitGroup) {
-	intervalStr := os.Getenv("AUTOPOSTER_INTERVAL")
-	if intervalStr == "" {
-		intervalStr = "10s"
-		slog.Info(fmt.Sprintf("AUTOPOSTER_INTERVAL not set. Using %s as fallback", intervalStr))
+	minIntervalStr := os.Getenv("AUTOPOSTER_MIN_INTERVAL")
+	if minIntervalStr == "" {
+		minIntervalStr = "1m"
+		slog.Info(fmt.Sprintf("AUTOPOSTER_MIN_INTERVAL not set. Using %s as fallback", minIntervalStr))
+	}
+	minInterval, err := time.ParseDuration(minIntervalStr)
+	if err != nil {
+		slog.Error("Invalid AUTOPOSTER_MIN_INTERVAL, skipping AutoPoster", "error", err, "value", minIntervalStr)
+		return
 	}
 
-	interval, err := time.ParseDuration(intervalStr)
+	maxIntervalStr := os.Getenv("AUTOPOSTER_MAX_INTERVAL")
+	if maxIntervalStr == "" {
+		maxIntervalStr = "10m"
+		slog.Info(fmt.Sprintf("AUTOPOSTER_MAX_INTERVAL not set. Using %s as fallback", maxIntervalStr))
+	}
+
+	maxInterval, err := time.ParseDuration(maxIntervalStr)
 	if err != nil {
-		slog.Error("Invalid AUTOPOSTER_INTERVAL, skipping AutoPoster", "error", err, "value", intervalStr)
+		slog.Error("Invalid AUTOPOSTER_MAX_INTERVAL, skipping AutoPoster", "error", err, "value", maxIntervalStr)
+		return
+	}
+
+	if maxInterval < minInterval {
+		slog.Error("AUTOPOSTER_MAX_INTERVAL is a smaller Duration than AUTOPOSTER_MIN_INTERVAL, skipping AutoPoster:", "minInterval", minInterval, "maxInterval", maxInterval)
 		return
 	}
 
@@ -323,11 +339,12 @@ func setupAutoPoster(ctx context.Context, store *storage.Store, wg *sync.WaitGro
 	}
 
 	config := worker.AutoPosterConfig{
-		Store:    store,
-		Interval: interval,
-		URL:      apiURL,
-		Model:    model,
-		Prompts:  strings.Split(prompts, ";"),
+		Store:       store,
+		MinInterval: minInterval,
+		MaxInterval: maxInterval,
+		URL:         apiURL,
+		Model:       model,
+		Prompts:     strings.Split(prompts, ";"),
 	}
 
 	poster := worker.NewAutoPoster(config)

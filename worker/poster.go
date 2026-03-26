@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"time"
 
+	"site/helper"
 	"site/storage"
 )
 
@@ -25,11 +26,12 @@ type TextResponse struct {
 }
 
 type AutoPosterConfig struct {
-	Store    *storage.Store
-	Interval time.Duration
-	URL      string
-	Model    string
-	Prompts  []string
+	Store       *storage.Store
+	MinInterval time.Duration
+	MaxInterval time.Duration
+	URL         string
+	Model       string
+	Prompts     []string
 }
 
 type AutoPoster struct {
@@ -78,12 +80,12 @@ func (p *AutoPoster) getText() (string, error) {
 
 // Start runs the periodic posting loop until the context is canceled
 func (p *AutoPoster) Start(ctx context.Context) {
-	ticker := time.NewTicker(p.config.Interval)
-	defer ticker.Stop()
+	randomTicker := helper.NewRandomTicker(p.config.MinInterval, p.config.MaxInterval)
+	defer randomTicker.Stop()
 
 	for {
 		select {
-		case <-ticker.C:
+		case <-randomTicker.C:
 			newText, err := p.getText()
 			if err != nil {
 				slog.Error("AutoPoster failed to get Post from TextService", "error", err)
