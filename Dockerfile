@@ -21,7 +21,7 @@ FROM alpine:3.21.3
 WORKDIR /app
 
 # Install tzdata for timezone support
-RUN apk add --no-cache tzdata=2026a-r0
+RUN apk add --no-cache tzdata
 
 # Create a non-root user and set permissions for the app and data directories
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup && \
